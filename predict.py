@@ -3,7 +3,6 @@ import shutil
 import subprocess
 import time
 from typing import List, Optional
-from weights import WeightsDownloadCache
 
 import numpy as np
 import torch
@@ -24,9 +23,7 @@ from diffusers.pipelines.stable_diffusion.safety_checker import (
     StableDiffusionSafetyChecker,
 )
 from diffusers.utils import load_image
-
 from transformers import CLIPImageProcessor
-
 from weights_manager import WeightsManager
 
 
@@ -65,9 +62,6 @@ def download_weights(url, dest):
     print("downloading took: ", time.time() - start)
 
 class Predictor(BasePredictor):
-    def __init__(self):
-        self.weights_manager = WeightsManager(self)
-
     def load_trained_weights(self, weights, pipe):
         self.weights_manager.load_trained_weights(weights, pipe)
 
@@ -75,12 +69,11 @@ class Predictor(BasePredictor):
         """Load the model into memory to make running multiple predictions efficient"""
 
         start = time.time()
+        self.weights_manager = WeightsManager(self)
         self.tuned_model = False
         self.tuned_weights = None
         if str(weights) == "weights":
             weights = None
-
-        self.weights_cache = WeightsDownloadCache()
 
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):

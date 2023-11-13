@@ -3,10 +3,12 @@ import os
 from diffusers.models.attention_processor import LoRAAttnProcessor2_0
 from safetensors.torch import load_file
 from dataset_and_utils import TokenEmbeddingsHandler
+from weights import WeightsDownloadCache
 
 class WeightsManager:
     def __init__(self, predictor):
         self.predictor = predictor
+        self.weights_cache = WeightsDownloadCache()
 
     def load_trained_weights(self, weights, pipe):
         from no_init import no_init_or_tensor
@@ -19,7 +21,7 @@ class WeightsManager:
 
         self.predictor.tuned_weights = weights
 
-        local_weights_cache = self.predictor.weights_cache.ensure(weights)
+        local_weights_cache = self.weights_cache.ensure(weights)
 
         # load UNET
         print("Loading fine-tuned model")
