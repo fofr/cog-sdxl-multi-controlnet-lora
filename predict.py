@@ -1,10 +1,9 @@
-import hashlib
 import json
 import os
 import shutil
 import subprocess
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import List, Optional
 from weights import WeightsDownloadCache
 
 import numpy as np
@@ -26,7 +25,6 @@ from diffusers.pipelines.stable_diffusion.safety_checker import (
     StableDiffusionSafetyChecker,
 )
 from diffusers.utils import load_image
-from safetensors import safe_open
 from safetensors.torch import load_file
 from transformers import CLIPImageProcessor
 
@@ -259,7 +257,7 @@ class Predictor(BasePredictor):
             default="An astronaut riding a rainbow unicorn",
         ),
         negative_prompt: str = Input(
-            description="Input Negative Prompt",
+            description="Negative Prompt",
             default="",
         ),
         image: Path = Input(
@@ -434,7 +432,7 @@ class Predictor(BasePredictor):
 
         if len(output_paths) == 0:
             raise Exception(
-                f"NSFW content detected. Try running it again, or try a different prompt."
+                "NSFW content detected. Try running it again, or try a different prompt."
             )
 
         return output_paths
