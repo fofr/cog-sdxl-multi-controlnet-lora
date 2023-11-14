@@ -11,10 +11,11 @@ import base64
 import os
 import sys
 import requests
+import glob
 
 
 def gen(output_fn, **kwargs):
-    if os.path.exists(output_fn):
+    if glob.glob(f"{output_fn}*"):
         return
 
     print("Generating", output_fn)
@@ -23,17 +24,18 @@ def gen(output_fn, **kwargs):
     data = response.json()
 
     try:
-        datauri = data["output"][0]
-        base64_encoded_data = datauri.split(",")[1]
-        data = base64.b64decode(base64_encoded_data)
+        for i, datauri in enumerate(data["output"]):
+            base64_encoded_data = datauri.split(",")[1]
+            decoded_data = base64.b64decode(base64_encoded_data)
+            with open(
+                f"{output_fn.rsplit('.', 1)[0]}_{i}.{output_fn.rsplit('.', 1)[1]}", "wb"
+            ) as f:
+                f.write(decoded_data)
     except:
         print("Error!")
         print("input:", kwargs)
         print(data["logs"])
         sys.exit(1)
-
-    with open(output_fn, "wb") as f:
-        f.write(data)
 
 
 def main():
