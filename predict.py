@@ -1,5 +1,4 @@
 import os
-import shutil
 import subprocess
 import time
 from typing import List, Optional
@@ -25,10 +24,10 @@ from diffusers import (
 from diffusers.pipelines.stable_diffusion.safety_checker import (
     StableDiffusionSafetyChecker,
 )
-from diffusers.utils import load_image
 from transformers import CLIPImageProcessor
 from weights_manager import WeightsManager
 from controlnet import ControlNet
+from sizing_strategy import SizingStrategy
 
 
 SDXL_MODEL_CACHE = "./sdxl-cache"
@@ -94,6 +93,7 @@ class Predictor(BasePredictor):
         """Load the model into memory to make running multiple predictions efficient"""
 
         start = time.time()
+        self.sizing_strategy = SizingStrategy()
         self.weights_manager = WeightsManager(self)
         self.tuned_model = False
         self.tuned_weights = None
@@ -172,10 +172,6 @@ class Predictor(BasePredictor):
 
         print("setup took: ", time.time() - start)
 
-    def load_image(self, path):
-        shutil.copyfile(path, "/tmp/image.png")
-        return load_image("/tmp/image.png").convert("RGB")
-
     def run_safety_checker(self, image):
         safety_checker_input = self.feature_extractor(image, return_tensors="pt").to(
             "cuda"
@@ -214,8 +210,20 @@ class Predictor(BasePredictor):
             description="Height of output image",
             default=768,
         ),
+        sizing_strategy: str = Input(
+            description="Decide how to resize images – use width/height, resize based on input image or control image",
+            choices=[
+                "width_height",
+                "input_image",
+                "controlnet_1_image",
+                "controlnet_2_image",
+                "controlnet_3_image",
+                "mask_image",
+            ],
+            default="width_height",
+        ),
         num_outputs: int = Input(
-            description="Number of images to output.",
+            description="Number of images to output",
             ge=1,
             le=4,
             default=1,
@@ -360,6 +368,29 @@ class Predictor(BasePredictor):
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
 
+        (
+            width,
+            height,
+            resized_images,
+        ) = self.sizing_strategy.apply(
+            sizing_strategy,
+            width,
+            height,
+            image,
+            mask,
+            controlnet_1_image,
+            controlnet_2_image,
+            controlnet_3_image,
+        )
+
+        [
+            image,
+            mask,
+            controlnet_1_image,
+            controlnet_2_image,
+            controlnet_3_image,
+        ] = resized_images
+
         if lora_weights:
             self.load_trained_weights(lora_weights, self.txt2img_pipe)
 
@@ -417,7 +448,7 @@ class Predictor(BasePredictor):
                     control_guidance_start.append(controlnet[2])
                     control_guidance_end.append(controlnet[3])
                     annotated_image = self.controlnet.preprocess(
-                        self.load_image(controlnet[4]), controlnet[0]
+                        controlnet[4], controlnet[0]
                     )
                     control_images.append(annotated_image)
 
@@ -454,17 +485,12 @@ class Predictor(BasePredictor):
             pipe = self.txt2img_pipe
 
         if inpainting:
-            sdxl_kwargs["image"] = self.load_image(image)
-            sdxl_kwargs["mask_image"] = self.load_image(mask)
+            sdxl_kwargs["image"] = image
+            sdxl_kwargs["mask_image"] = mask
             sdxl_kwargs["strength"] = prompt_strength
-            sdxl_kwargs["width"] = width
-            sdxl_kwargs["height"] = height
         elif img2img:
-            sdxl_kwargs["image"] = self.load_image(image)
+            sdxl_kwargs["image"] = image
             sdxl_kwargs["strength"] = prompt_strength
-        else:
-            sdxl_kwargs["width"] = width
-            sdxl_kwargs["height"] = height
 
         if refine == "expert_ensemble_refiner":
             sdxl_kwargs["output_type"] = "latent"
@@ -482,6 +508,8 @@ class Predictor(BasePredictor):
         generator = torch.Generator("cuda").manual_seed(seed)
 
         common_args = {
+            "width": width,
+            "height": height,
             "prompt": [prompt] * num_outputs,
             "negative_prompt": [negative_prompt] * num_outputs,
             "guidance_scale": guidance_scale,
