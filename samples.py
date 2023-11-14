@@ -42,15 +42,53 @@ def main():
     CONTROLNET_MODELS = [
         "none",
         "edge_canny",
-        "edge_pidi",
         "illusion",
         "depth_leres",
         "depth_midas",
         "soft_edge_hed",
+        "soft_edge_pidi",
         "lineart",
         "lineart_anime",
         "openpose",
     ]
+
+    # gen(
+    #     "sample.width_height.png",
+    #     prompt="A studio portrait photo of a cat",
+    #     num_inference_steps=25,
+    #     seed=1000,
+    #     width=768,
+    #     height=768,
+    #     controlnet_1="edge_canny",
+    #     controlnet_1_image="https://replicate.delivery/pbxt/gixujfS8h0Q5MyBjEQ1ABVeeHJgs2wcQqZUeEhblne9ntkNOC/out-0.png",
+    #     image="https://tjzk.replicate.delivery/models_models_featured_image/9065f9e3-40da-4742-8cb8-adfa8e794c0d/sdxl_cover.jpg"
+    # )
+
+    gen(
+        "sample.resize_based_on_image.png",
+        prompt="A studio portrait photo of a cat",
+        num_inference_steps=25,
+        seed=1000,
+        width=768,
+        height=768,
+        sizing_strategy="input_image",
+        controlnet_1="edge_canny",
+        controlnet_1_image="https://replicate.delivery/pbxt/gixujfS8h0Q5MyBjEQ1ABVeeHJgs2wcQqZUeEhblne9ntkNOC/out-0.png",
+        image="https://replicate.delivery/pbxt/zIPS4uyGONKvKBg9iTA6FRC785eK7eWhpewpR7W0RnF9rlniA/out-0.png"
+    )
+
+    gen(
+        "sample.resize_based_on_control_image.png",
+        prompt="A studio portrait photo of a cat",
+        num_inference_steps=25,
+        seed=1000,
+        width=2048,
+        height=2048,
+        sizing_strategy="controlnet_1_image",
+        controlnet_1="edge_canny",
+        controlnet_1_image="https://replicate.delivery/pbxt/gixujfS8h0Q5MyBjEQ1ABVeeHJgs2wcQqZUeEhblne9ntkNOC/out-0.png",
+        image="https://replicate.delivery/pbxt/zIPS4uyGONKvKBg9iTA6FRC785eK7eWhpewpR7W0RnF9rlniA/out-0.png"
+    )
 
     gen(
         "sample.txt2img.png",
