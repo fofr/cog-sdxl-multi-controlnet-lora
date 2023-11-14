@@ -17,6 +17,9 @@ from diffusers import (
     PNDMScheduler,
     StableDiffusionXLImg2ImgPipeline,
     StableDiffusionXLInpaintPipeline,
+    StableDiffusionXLControlNetPipeline,
+    StableDiffusionXLControlNetInpaintPipeline,
+    StableDiffusionXLControlNetImg2ImgPipeline,
 )
 
 from diffusers.pipelines.stable_diffusion.safety_checker import (
@@ -25,6 +28,7 @@ from diffusers.pipelines.stable_diffusion.safety_checker import (
 from diffusers.utils import load_image
 from transformers import CLIPImageProcessor
 from weights_manager import WeightsManager
+from controlnet import ControlNet
 
 
 SDXL_MODEL_CACHE = "./sdxl-cache"
@@ -61,9 +65,30 @@ def download_weights(url, dest):
     subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
     print("downloading took: ", time.time() - start)
 
+
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
         self.weights_manager.load_trained_weights(weights, pipe)
+
+    def build_controlnet_pipeline(self, pipeline_class, controlnet_models):
+        pipe = pipeline_class.from_pretrained(
+            SDXL_MODEL_CACHE,
+            torch_dtype=torch.float16,
+            use_safetensors=True,
+            variant="fp16",
+            vae=self.txt2img_pipe.vae,
+            text_encoder=self.txt2img_pipe.text_encoder,
+            text_encoder_2=self.txt2img_pipe.text_encoder_2,
+            tokenizer=self.txt2img_pipe.tokenizer,
+            tokenizer_2=self.txt2img_pipe.tokenizer_2,
+            unet=self.txt2img_pipe.unet,
+            scheduler=self.txt2img_pipe.scheduler,
+            controlnet=self.controlnet.get_models(controlnet_models),
+        )
+
+        pipe.to("cuda")
+
+        return pipe
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
@@ -142,8 +167,10 @@ class Predictor(BasePredictor):
             variant="fp16",
         )
         self.refiner.to("cuda")
+
+        self.controlnet = ControlNet(self)
+
         print("setup took: ", time.time() - start)
-        # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
 
     def load_image(self, path):
         shutil.copyfile(path, "/tmp/image.png")
@@ -246,6 +273,87 @@ class Predictor(BasePredictor):
             description="Disable safety checker for generated images. This feature is only available through the API. See [https://replicate.com/docs/how-does-replicate-work#safety](https://replicate.com/docs/how-does-replicate-work#safety)",
             default=False,
         ),
+        controlnet_1: str = Input(
+            description="Controlnet",
+            choices=ControlNet.CONTROLNET_MODELS,
+            default="none",
+        ),
+        controlnet_1_image: Path = Input(
+            description="Input image for first controlnet",
+            default=None,
+        ),
+        controlnet_1_conditioning_scale: float = Input(
+            description="How strong the controlnet conditioning is",
+            ge=0.0,
+            le=4.0,
+            default=0.75,
+        ),
+        controlnet_1_start: float = Input(
+            description="When controlnet conditioning starts",
+            ge=0.0,
+            le=1.0,
+            default=0.0,
+        ),
+        controlnet_1_end: float = Input(
+            description="When controlnet conditioning ends",
+            ge=0.0,
+            le=1.0,
+            default=1.0,
+        ),
+        controlnet_2: str = Input(
+            description="Controlnet",
+            choices=ControlNet.CONTROLNET_MODELS,
+            default="none",
+        ),
+        controlnet_2_image: Path = Input(
+            description="Input image for second controlnet",
+            default=None,
+        ),
+        controlnet_2_conditioning_scale: float = Input(
+            description="How strong the controlnet conditioning is",
+            ge=0.0,
+            le=4.0,
+            default=0.75,
+        ),
+        controlnet_2_start: float = Input(
+            description="When controlnet conditioning starts",
+            ge=0.0,
+            le=1.0,
+            default=0.0,
+        ),
+        controlnet_2_end: float = Input(
+            description="When controlnet conditioning ends",
+            ge=0.0,
+            le=1.0,
+            default=1.0,
+        ),
+        controlnet_3: str = Input(
+            description="Controlnet",
+            choices=ControlNet.CONTROLNET_MODELS,
+            default="none",
+        ),
+        controlnet_3_image: Path = Input(
+            description="Input image for third controlnet",
+            default=None,
+        ),
+        controlnet_3_conditioning_scale: float = Input(
+            description="How strong the controlnet conditioning is",
+            ge=0.0,
+            le=4.0,
+            default=0.75,
+        ),
+        controlnet_3_start: float = Input(
+            description="When controlnet conditioning starts",
+            ge=0.0,
+            le=1.0,
+            default=0.0,
+        ),
+        controlnet_3_end: float = Input(
+            description="When controlnet conditioning ends",
+            ge=0.0,
+            le=1.0,
+            default=1.0,
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model."""
         if seed is None:
@@ -265,24 +373,98 @@ class Predictor(BasePredictor):
             for k, v in self.token_map.items():
                 prompt = prompt.replace(k, v)
         print(f"Prompt: {prompt}")
-        if image and mask:
-            print("inpainting mode")
+
+        inpainting = image and mask
+        img2img = image and not mask
+        controlnet = (
+            controlnet_1 != "none" or controlnet_2 != "none" or controlnet_3 != "none"
+        )
+
+        controlnet_args = {}
+        control_images = []
+        if controlnet:
+            controlnet_conditioning_scales = []
+            control_guidance_start = []
+            control_guidance_end = []
+
+            controlnets = [
+                (
+                    controlnet_1,
+                    controlnet_1_conditioning_scale,
+                    controlnet_1_start,
+                    controlnet_1_end,
+                    controlnet_1_image,
+                ),
+                (
+                    controlnet_2,
+                    controlnet_2_conditioning_scale,
+                    controlnet_2_start,
+                    controlnet_2_end,
+                    controlnet_2_image,
+                ),
+                (
+                    controlnet_3,
+                    controlnet_3_conditioning_scale,
+                    controlnet_3_start,
+                    controlnet_3_end,
+                    controlnet_3_image,
+                ),
+            ]
+
+            for controlnet in controlnets:
+                if controlnet[0] != "none":
+                    controlnet_conditioning_scales.append(controlnet[1])
+                    control_guidance_start.append(controlnet[2])
+                    control_guidance_end.append(controlnet[3])
+                    annotated_image = self.controlnet.preprocess(
+                        self.load_image(controlnet[4]), controlnet[0]
+                    )
+                    control_images.append(annotated_image)
+
+            controlnet_args = {
+                "controlnet_conditioning_scale": controlnet_conditioning_scales,
+                "control_guidance_start": control_guidance_start,
+                "control_guidance_end": control_guidance_end,
+            }
+
+            if inpainting:
+                controlnet_args["control_image"] = control_images
+                pipe = self.build_controlnet_pipeline(
+                    StableDiffusionXLControlNetInpaintPipeline,
+                    [controlnet[0] for controlnet in controlnets],
+                )
+            elif img2img:
+                controlnet_args["control_image"] = control_images
+                pipe = self.build_controlnet_pipeline(
+                    StableDiffusionXLControlNetImg2ImgPipeline,
+                    [controlnet[0] for controlnet in controlnets],
+                )
+            else:
+                controlnet_args["image"] = control_images
+                pipe = self.build_controlnet_pipeline(
+                    StableDiffusionXLControlNetPipeline,
+                    [controlnet[0] for controlnet in controlnets],
+                )
+
+        elif inpainting:
+            pipe = self.inpaint_pipe
+        elif img2img:
+            pipe = self.img2img_pipe
+        else:
+            pipe = self.txt2img_pipe
+
+        if inpainting:
             sdxl_kwargs["image"] = self.load_image(image)
             sdxl_kwargs["mask_image"] = self.load_image(mask)
             sdxl_kwargs["strength"] = prompt_strength
             sdxl_kwargs["width"] = width
             sdxl_kwargs["height"] = height
-            pipe = self.inpaint_pipe
-        elif image:
-            print("img2img mode")
+        elif img2img:
             sdxl_kwargs["image"] = self.load_image(image)
             sdxl_kwargs["strength"] = prompt_strength
-            pipe = self.img2img_pipe
         else:
-            print("txt2img mode")
             sdxl_kwargs["width"] = width
             sdxl_kwargs["height"] = height
-            pipe = self.txt2img_pipe
 
         if refine == "expert_ensemble_refiner":
             sdxl_kwargs["output_type"] = "latent"
@@ -310,7 +492,7 @@ class Predictor(BasePredictor):
         if self.is_lora:
             sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
 
-        output = pipe(**common_args, **sdxl_kwargs)
+        output = pipe(**common_args, **sdxl_kwargs, **controlnet_args)
 
         if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
             refiner_kwargs = {
@@ -332,6 +514,13 @@ class Predictor(BasePredictor):
             _, has_nsfw_content = self.run_safety_checker(output.images)
 
         output_paths = []
+
+        if controlnet:
+            for i, image in enumerate(control_images):
+                output_path = f"/tmp/control-{i}.png"
+                image.save(output_path)
+                output_paths.append(Path(output_path))
+
         for i, image in enumerate(output.images):
             if not disable_safety_checker:
                 if has_nsfw_content[i]:

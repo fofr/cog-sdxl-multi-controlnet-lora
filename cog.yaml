@@ -10,7 +10,7 @@ build:
     - "libsm6"
     - "libxext6"
   python_packages:
-    - "diffusers==0.19.3"
+    - "diffusers==0.21.4"
     - "torch==2.0.1"
     - "transformers==4.31.0"
     - "invisible-watermark==0.2.0"
@@ -19,6 +19,8 @@ build:
     - "numpy==1.25.1"
     - "fire==0.5.0"
     - "opencv-python-headless>=4.1.0.25"
+    - "controlnet-aux==0.0.7"
+    - "mediapipe==0.10.8"
 
   run:
     - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.0.3/pget" && chmod +x /usr/local/bin/pget
