@@ -47,8 +47,7 @@ class ControlNet:
         # TODO: Use replicate weights instead of downloading
         print("Initializing", model_name)
         return ControlNetModel.from_pretrained(
-            model_name, cache_dir="model_cache",
-            torch_dtype=torch.float16
+            model_name, cache_dir="model_cache", torch_dtype=torch.float16
         )
 
     def get_model(self, controlnet_name):
@@ -58,7 +57,9 @@ class ControlNet:
             return self.models["canny"]
         elif controlnet_name.startswith("depth_"):
             return self.models["depth"]
-        elif controlnet_name == "soft_edge" or controlnet_name.startswith("lineart"):
+        elif controlnet_name.startswith("soft_edge") or controlnet_name.startswith(
+            "lineart"
+        ):
             return self.models["soft_edge"]
         else:
             return None
