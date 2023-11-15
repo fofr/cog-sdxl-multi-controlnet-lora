@@ -7,10 +7,10 @@ class ControlNet:
     CONTROLNET_MODELS = [
         "none",
         "edge_canny",
-        "edge_pidi",
         "illusion",
         "depth_leres",
         "depth_midas",
+        "soft_edge_pidi",
         "soft_edge_hed",
         "lineart",
         "lineart_anime",

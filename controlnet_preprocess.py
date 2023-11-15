@@ -16,9 +16,9 @@ class ControlNetPreprocessor:
     ANNOTATOR_NAMES = [
         "none",
         "edge_canny",
-        "edge_pidi",
         "depth_leres",
         "depth_midas",
+        "soft_edge_pidi",
         "soft_edge_hed",
         "lineart",
         "lineart_anime",
@@ -34,9 +34,9 @@ class ControlNetPreprocessor:
     def __init__(self, predictor):
         self.annotators = {
             "edge_canny": CannyDetector(),
-            "edge_pidi": self.initialize_detector(PidiNetDetector),
             "depth_leres": self.initialize_detector(LeresDetector),
             "depth_midas": self.initialize_detector(MidasDetector),
+            "soft_edge_pidi": self.initialize_detector(PidiNetDetector),
             "soft_edge_hed": self.initialize_detector(HEDdetector),
             "lineart": self.initialize_detector(LineartDetector),
             "lineart_anime": self.initialize_detector(LineartAnimeDetector),
