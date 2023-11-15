@@ -1,5 +1,7 @@
 # cog-sdxl-multi-controlnet-lora
 
+https://replicate.com/fofr/sdxl-multi-controlnet-lora
+
 [![Replicate demo and cloud API](https://replicate.com/fofr/sdxl-multi-controlnet-lora/badge)](https://replicate.com/fofr/sdxl-multi-controlnet-lora)
 
 SDXL with:
