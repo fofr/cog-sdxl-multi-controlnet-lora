@@ -250,14 +250,8 @@ class Predictor(BasePredictor):
         ),
         refine: str = Input(
             description="Which refine style to use",
-            choices=["no_refiner", "expert_ensemble_refiner", "base_image_refiner"],
+            choices=["no_refiner", "base_image_refiner"],
             default="no_refiner",
-        ),
-        high_noise_frac: float = Input(
-            description="For expert_ensemble_refiner, the fraction of noise to use",
-            default=0.8,
-            le=1.0,
-            ge=0.0,
         ),
         refine_steps: int = Input(
             description="For base_image_refiner, the number of steps to refine, defaults to num_inference_steps",
@@ -492,10 +486,7 @@ class Predictor(BasePredictor):
             sdxl_kwargs["image"] = image
             sdxl_kwargs["strength"] = prompt_strength
 
-        if refine == "expert_ensemble_refiner":
-            sdxl_kwargs["output_type"] = "latent"
-            sdxl_kwargs["denoising_end"] = high_noise_frac
-        elif refine == "base_image_refiner":
+        if refine == "base_image_refiner":
             sdxl_kwargs["output_type"] = "latent"
 
         if not apply_watermark:
@@ -522,17 +513,19 @@ class Predictor(BasePredictor):
 
         output = pipe(**common_args, **sdxl_kwargs, **controlnet_args)
 
-        if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
+        if refine == "base_image_refiner":
             refiner_kwargs = {
                 "image": output.images,
             }
 
-            if refine == "expert_ensemble_refiner":
-                refiner_kwargs["denoising_start"] = high_noise_frac
-            if refine == "base_image_refiner" and refine_steps:
-                common_args["num_inference_steps"] = refine_steps
+            common_args_without_dimensions = {
+                k: v for k, v in common_args.items() if k not in ["width", "height"]
+            }
 
-            output = self.refiner(**common_args, **refiner_kwargs)
+            if refine == "base_image_refiner" and refine_steps:
+                common_args_without_dimensions["num_inference_steps"] = refine_steps
+
+            output = self.refiner(**common_args_without_dimensions, **refiner_kwargs)
 
         if not apply_watermark:
             pipe.watermark = watermark_cache
