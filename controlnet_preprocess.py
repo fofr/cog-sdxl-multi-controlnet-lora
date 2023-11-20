@@ -1,5 +1,5 @@
 import torch
-from PIL import Image
+from weights_downloader import WeightsDownloader
 from controlnet_aux import (
     HEDdetector,
     MidasDetector,
@@ -10,6 +10,9 @@ from controlnet_aux import (
     CannyDetector,
     LeresDetector,
 )
+
+CONTROLNET_PREPROCESSOR_MODEL_CACHE = "./controlnet-preprocessor-cache"
+CONTROLNET_PREPROCESSOR_URL = "https://weights.replicate.delivery/default/controlnet/cn-preprocess-leres-midas-pidi-hed-lineart-openpose.tar"
 
 
 class ControlNetPreprocessor:
@@ -23,7 +26,6 @@ class ControlNetPreprocessor:
         "lineart",
         "lineart_anime",
         "openpose",
-
         # "straight_edge_mlsd",
         # "face_detector",
         # "content_shuffle",
@@ -32,6 +34,10 @@ class ControlNetPreprocessor:
     ]
 
     def __init__(self, predictor):
+        WeightsDownloader.download_if_not_exists(
+            CONTROLNET_PREPROCESSOR_URL, CONTROLNET_PREPROCESSOR_MODEL_CACHE
+        )
+
         self.annotators = {
             "edge_canny": CannyDetector(),
             "depth_leres": self.initialize_detector(LeresDetector),
@@ -41,7 +47,6 @@ class ControlNetPreprocessor:
             "lineart": self.initialize_detector(LineartDetector),
             "lineart_anime": self.initialize_detector(LineartAnimeDetector),
             "openpose": self.initialize_detector(OpenposeDetector),
-
             # "straight_edge_mlsd": self.initialize_detector(MLSDdetector),
             # "face_detector": MediapipeFaceDetector(),
             # "content_shuffle": ContentShuffleDetector(),
@@ -65,7 +70,7 @@ class ControlNetPreprocessor:
         print(f"Initializing {detector_class.__name__}")
         return detector_class.from_pretrained(
             model_name,
-            cache_dir="model_cache",
+            cache_dir=CONTROLNET_PREPROCESSOR_MODEL_CACHE,
             **kwargs,
         )
 

@@ -1,6 +1,8 @@
 sdxl-cache/
 refiner-cache/
 safety-cache/
+controlnet-cache/
+controlnet-preprocessor-cache/
 trained-model/
 *.png
 cache/

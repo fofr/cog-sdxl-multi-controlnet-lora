@@ -1,6 +1,10 @@
 import torch
 from diffusers import ControlNetModel
 from controlnet_preprocess import ControlNetPreprocessor
+from weights_downloader import WeightsDownloader
+
+CONTROLNET_MODEL_CACHE = "./controlnet-cache"
+CONTROLNET_URL = "https://weights.replicate.delivery/default/controlnet/sdxl-cn-canny-depth-softe-pose-qr.tar"
 
 
 class ControlNet:
@@ -24,6 +28,8 @@ class ControlNet:
     ]
 
     def __init__(self, predictor):
+        WeightsDownloader.download_if_not_exists(CONTROLNET_URL, CONTROLNET_MODEL_CACHE)
+
         self.controlnet_preprocessor = ControlNetPreprocessor(predictor)
         self.models = {
             "canny": self.initialize_controlnet(
@@ -44,10 +50,9 @@ class ControlNet:
         }
 
     def initialize_controlnet(self, model_name):
-        # TODO: Use replicate weights instead of downloading
         print("Initializing", model_name)
         return ControlNetModel.from_pretrained(
-            model_name, cache_dir="model_cache", torch_dtype=torch.float16
+            model_name, cache_dir=CONTROLNET_MODEL_CACHE, torch_dtype=torch.float16
         )
 
     def get_model(self, controlnet_name):
