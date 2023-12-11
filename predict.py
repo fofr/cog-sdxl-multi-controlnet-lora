@@ -348,10 +348,13 @@ class Predictor(BasePredictor):
         ),
     ) -> List[Path]:
         """Run a single prediction on the model."""
+        predict_start = time.time()
+
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
 
+        resize_start = time.time()
         (
             width,
             height,
@@ -366,6 +369,7 @@ class Predictor(BasePredictor):
             controlnet_2_image,
             controlnet_3_image,
         )
+        print(f"resize took: {time.time() - resize_start:.2f}s")
 
         [
             image,
@@ -376,7 +380,9 @@ class Predictor(BasePredictor):
         ] = resized_images
 
         if lora_weights:
+            lora_load_start = time.time()
             self.load_trained_weights(lora_weights, self.txt2img_pipe)
+            print(f"lora load took: {time.time() - lora_load_start:.2f}s")
 
         # OOMs can leave vae in bad state
         if self.txt2img_pipe.vae.dtype == torch.float32:
@@ -426,6 +432,7 @@ class Predictor(BasePredictor):
                 ),
             ]
 
+            controlnet_preprocess_start = time.time()
             for controlnet in controlnets:
                 if controlnet[0] != "none":
                     controlnet_conditioning_scales.append(controlnet[1])
@@ -435,6 +442,9 @@ class Predictor(BasePredictor):
                         controlnet[4], controlnet[0]
                     )
                     control_images.append(annotated_image)
+            print(
+                f"controlnet preprocess took: {time.time() - controlnet_preprocess_start:.2f}s"
+            )
 
             controlnet_args = {
                 "controlnet_conditioning_scale": controlnet_conditioning_scales,
@@ -443,18 +453,21 @@ class Predictor(BasePredictor):
             }
 
             if inpainting:
+                print("Using inpaint + controlnet pipeline")
                 controlnet_args["control_image"] = control_images
                 pipe = self.build_controlnet_pipeline(
                     StableDiffusionXLControlNetInpaintPipeline,
                     [controlnet[0] for controlnet in controlnets],
                 )
             elif img2img:
+                print("Using img2img + controlnet pipeline")
                 controlnet_args["control_image"] = control_images
                 pipe = self.build_controlnet_pipeline(
                     StableDiffusionXLControlNetImg2ImgPipeline,
                     [controlnet[0] for controlnet in controlnets],
                 )
             else:
+                print("Using txt2img + controlnet pipeline")
                 controlnet_args["image"] = control_images
                 pipe = self.build_controlnet_pipeline(
                     StableDiffusionXLControlNetPipeline,
@@ -462,10 +475,13 @@ class Predictor(BasePredictor):
                 )
 
         elif inpainting:
+            print("Using inpaint pipeline")
             pipe = self.inpaint_pipe
         elif img2img:
+            print("Using img2img pipeline")
             pipe = self.img2img_pipe
         else:
+            print("Using txt2img pipeline")
             pipe = self.txt2img_pipe
 
         if inpainting:
@@ -489,8 +505,6 @@ class Predictor(BasePredictor):
         generator = torch.Generator("cuda").manual_seed(seed)
 
         common_args = {
-            "width": width,
-            "height": height,
             "prompt": [prompt] * num_outputs,
             "negative_prompt": [negative_prompt] * num_outputs,
             "guidance_scale": guidance_scale,
@@ -498,10 +512,18 @@ class Predictor(BasePredictor):
             "num_inference_steps": num_inference_steps,
         }
 
+        # img2img pipeline doesn’t accept width/height
+        # (img2img with controlnet does)
+        if controlnet or not img2img:
+            common_args["width"] = width
+            common_args["height"] = height
+
         if self.is_lora:
             sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
 
+        inference_start = time.time()
         output = pipe(**common_args, **sdxl_kwargs, **controlnet_args)
+        print(f"inference took: {time.time() - inference_start:.2f}s")
 
         if refine == "base_image_refiner":
             refiner_kwargs = {
@@ -546,4 +568,5 @@ class Predictor(BasePredictor):
                 "NSFW content detected. Try running it again, or try a different prompt."
             )
 
+        print(f"prediction took: {time.time() - predict_start:.2f}s")
         return output_paths
