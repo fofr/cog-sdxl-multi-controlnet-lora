@@ -16,47 +16,32 @@ CONTROLNET_PREPROCESSOR_URL = "https://weights.replicate.delivery/default/contro
 
 
 class ControlNetPreprocessor:
-    ANNOTATOR_NAMES = [
-        "none",
-        "edge_canny",
-        "depth_leres",
-        "depth_midas",
-        "soft_edge_pidi",
-        "soft_edge_hed",
-        "lineart",
-        "lineart_anime",
-        "openpose",
-        # "straight_edge_mlsd",
-        # "face_detector",
-        # "content_shuffle",
-        # "normal_bae",
-        # "segementation_sam",
-    ]
+    ANNOTATOR_CLASSES = {
+        "none": None,
+        "edge_canny": CannyDetector,
+        "depth_leres": LeresDetector,
+        "depth_midas": MidasDetector,
+        "soft_edge_pidi": PidiNetDetector,
+        "soft_edge_hed": HEDdetector,
+        "lineart": LineartDetector,
+        "lineart_anime": LineartAnimeDetector,
+        "openpose": OpenposeDetector,
+        # "straight_edge_mlsd": None,
+        # "face_detector": None,
+        # "content_shuffle": None,
+        # "normal_bae": None,
+        # "segementation_sam": None,
+    }
+
+    ANNOTATOR_NAMES = list(ANNOTATOR_CLASSES.keys())
 
     def __init__(self, predictor):
         WeightsDownloader.download_if_not_exists(
             CONTROLNET_PREPROCESSOR_URL, CONTROLNET_PREPROCESSOR_MODEL_CACHE
         )
 
-        self.annotators = {
-            "edge_canny": CannyDetector(),
-            "depth_leres": self.initialize_detector(LeresDetector),
-            "depth_midas": self.initialize_detector(MidasDetector),
-            "soft_edge_pidi": self.initialize_detector(PidiNetDetector),
-            "soft_edge_hed": self.initialize_detector(HEDdetector),
-            "lineart": self.initialize_detector(LineartDetector),
-            "lineart_anime": self.initialize_detector(LineartAnimeDetector),
-            "openpose": self.initialize_detector(OpenposeDetector),
-            # "straight_edge_mlsd": self.initialize_detector(MLSDdetector),
-            # "face_detector": MediapipeFaceDetector(),
-            # "content_shuffle": ContentShuffleDetector(),
-            # "normal_bae": self.initialize_detector(NormalBaeDetector),
-            # "segementation_sam": self.initialize_detector(
-            #     SamDetector,
-            #     model_name="ybelkada/segment-anything",
-            #     subfolder="checkpoints",
-            # ),
-        }
+        self.annotators = {}
+        self.predictor = predictor
 
         torch.device("cuda")
 
@@ -68,15 +53,22 @@ class ControlNetPreprocessor:
         self, detector_class, model_name="lllyasviel/Annotators", **kwargs
     ):
         print(f"Initializing {detector_class.__name__}")
-        return detector_class.from_pretrained(
-            model_name,
-            cache_dir=CONTROLNET_PREPROCESSOR_MODEL_CACHE,
-            **kwargs,
-        )
+        if hasattr(detector_class, 'from_pretrained'):
+            return detector_class.from_pretrained(
+                model_name,
+                cache_dir=CONTROLNET_PREPROCESSOR_MODEL_CACHE,
+                **kwargs,
+            )
+        else:
+            return detector_class(**kwargs)
 
     def annotators_list(self):
         return list(self.annotators.keys())
 
     def process_image(self, image, annotator):
         print(f"Processing image with {annotator}")
+        if annotator not in self.annotators:
+            self.annotators[annotator] = self.initialize_detector(
+                self.ANNOTATOR_CLASSES[annotator]
+            )
         return self.annotators[annotator](image)

@@ -29,25 +29,9 @@ class ControlNet:
 
     def __init__(self, predictor):
         WeightsDownloader.download_if_not_exists(CONTROLNET_URL, CONTROLNET_MODEL_CACHE)
-
-        self.controlnet_preprocessor = ControlNetPreprocessor(predictor)
-        self.models = {
-            "canny": self.initialize_controlnet(
-                "diffusers/controlnet-canny-sdxl-1.0",
-            ),
-            "depth": self.initialize_controlnet(
-                "diffusers/controlnet-depth-sdxl-1.0-small",
-            ),
-            "soft_edge": self.initialize_controlnet(
-                "SargeZT/controlnet-sd-xl-1.0-softedge-dexined",
-            ),
-            "openpose": self.initialize_controlnet(
-                "thibaud/controlnet-openpose-sdxl-1.0",
-            ),
-            "illusion": self.initialize_controlnet(
-                "monster-labs/control_v1p_sdxl_qrcode_monster",
-            ),
-        }
+        self.predictor = predictor
+        self.controlnet_preprocessor = None
+        self.models = {}
 
     def initialize_controlnet(self, model_name):
         print("Initializing", model_name)
@@ -56,18 +40,18 @@ class ControlNet:
         )
 
     def get_model(self, controlnet_name):
-        if controlnet_name in self.models:
-            return self.models[controlnet_name]
-        elif controlnet_name.startswith("edge_"):
-            return self.models["canny"]
-        elif controlnet_name.startswith("depth_"):
-            return self.models["depth"]
-        elif controlnet_name.startswith("soft_edge") or controlnet_name.startswith(
-            "lineart"
-        ):
-            return self.models["soft_edge"]
-        else:
-            return None
+        if controlnet_name not in self.models:
+            if controlnet_name.startswith("edge_"):
+                self.models[controlnet_name] = self.initialize_controlnet("diffusers/controlnet-canny-sdxl-1.0")
+            elif controlnet_name.startswith("depth_"):
+                self.models[controlnet_name] = self.initialize_controlnet("diffusers/controlnet-depth-sdxl-1.0-small")
+            elif controlnet_name.startswith("soft_edge") or controlnet_name.startswith("lineart"):
+                self.models[controlnet_name] = self.initialize_controlnet("SargeZT/controlnet-sd-xl-1.0-softedge-dexined")
+            elif controlnet_name == "openpose":
+                self.models[controlnet_name] = self.initialize_controlnet("thibaud/controlnet-openpose-sdxl-1.0")
+            elif controlnet_name == "illusion":
+                self.models[controlnet_name] = self.initialize_controlnet("monster-labs/control_v1p_sdxl_qrcode_monster")
+        return self.models.get(controlnet_name)
 
     def get_models(self, controlnet_names):
         models = [
@@ -79,6 +63,9 @@ class ControlNet:
         # Illusion model needs no preprocessing
         if controlnet_name == "illusion" or controlnet_name == "none":
             return image
+
+        if self.controlnet_preprocessor is None:
+            self.controlnet_preprocessor = ControlNetPreprocessor(self.predictor)
 
         return self.controlnet_preprocessor.process_image(image, controlnet_name)
 
