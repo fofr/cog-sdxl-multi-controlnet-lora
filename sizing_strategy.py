@@ -64,12 +64,17 @@ class SizingStrategy:
         control_2_image=None,
         control_3_image=None,
     ):
+        image_keys = [
+            "input_image",
+            "mask_image",
+            "controlnet_1_image",
+            "controlnet_2_image",
+            "controlnet_3_image",
+        ]
+        image_values = [image, mask, control_1_image, control_2_image, control_3_image]
         image_dict = {
-            "input_image": self.open_image(image),
-            "mask_image": self.open_image(mask),
-            "controlnet_1_image": self.open_image(control_1_image),
-            "controlnet_2_image": self.open_image(control_2_image),
-            "controlnet_3_image": self.open_image(control_3_image),
+            key: self.open_image(value).convert("RGB") if value is not None else None
+            for key, value in zip(image_keys, image_values)
         }
 
         if sizing_strategy in image_dict:
